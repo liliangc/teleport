@@ -1363,11 +1363,26 @@ func (a *AuthServer) CreateAccessRequest(req services.AccessRequest) error {
 	if err := a.validateAccessRequest(req); err != nil {
 		return trace.Wrap(err)
 	}
-	ttl, err := a.calculateAccessRequestTTL(req)
+	ttl, err := a.calculateMaxAccessTTL(req)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	req.SetTTL(a.clock, ttl)
+	now := a.clock.Now().UTC()
+	exp := now.Add(ttl)
+	// By default, resource expiry should match access expiry.
+	req.SetExpiry(exp)
+	// Set acccess expiry if an allowable default was not provided.
+	if req.GetAccessExpiry().Before(now) || req.GetAccessExpiry().After(exp) {
+		req.SetAccessExpiry(exp)
+	}
+	// If the access-request is in a pending state, then the expiry of the underlying resource
+	// is capped to to PendingAccessDuration in order to limit orphaned access requests.
+	if req.GetState().IsPending() {
+		pexp := now.Add(defaults.PendingAccessDuration)
+		if pexp.Before(req.Expiry()) {
+			req.SetExpiry(pexp)
+		}
+	}
 	return a.DynamicAccess.CreateAccessRequest(req)
 }
 
@@ -1399,12 +1414,11 @@ func (a *AuthServer) validateAccessRequest(req services.AccessRequest) error {
 	return nil
 }
 
-// calculateAccessRequestTTL determines the maximum allowable TTL for a given access request
+// calculateMaxAccessTTL determines the maximum allowable TTL for a given access request
 // based on the MaxSessionTTLs of the roles being requested (a access request's life cannot
 // exceed the smallest allowable MaxSessionTTL value of the roles that it requests).
-func (a *AuthServer) calculateAccessRequestTTL(req services.AccessRequest) (time.Duration, error) {
-	const MaxAccessRequestTTL = 20 * time.Hour
-	minTTL := MaxAccessRequestTTL
+func (a *AuthServer) calculateMaxAccessTTL(req services.AccessRequest) (time.Duration, error) {
+	minTTL := defaults.MaxAccessDuration
 	for _, roleName := range req.GetRoles() {
 		role, err := a.GetRole(roleName)
 		if err != nil {

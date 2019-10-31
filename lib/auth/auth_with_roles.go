@@ -817,6 +817,10 @@ func (a *AuthWithRoles) CreateAccessRequest(req services.AccessRequest) error {
 			return trace.Wrap(err)
 		}
 	}
+	// Ensure that an access request cannot outlive the identity that creates it.
+	if req.GetAccessExpiry().Before(a.authServer.GetClock().Now()) || req.GetAccessExpiry().After(a.identity.Expires) {
+		req.SetAccessExpiry(a.identity.Expires)
+	}
 	return a.authServer.CreateAccessRequest(req)
 }
 
@@ -967,31 +971,31 @@ func (a *AuthWithRoles) GenerateUserCerts(ctx context.Context, req proto.UserCer
 	if len(req.AccessRequests) > 0 {
 		// add any applicable access request values.
 		for _, reqID := range req.AccessRequests {
-			roleReq, err := a.authServer.GetAccessRequest(reqID)
+			accessReq, err := a.authServer.GetAccessRequest(reqID)
 			if err != nil {
 				if trace.IsNotFound(err) {
 					return nil, trace.AccessDenied("invalid access request %q", reqID)
 				}
 				return nil, trace.Wrap(err)
 			}
-			if roleReq.GetUser() != req.Username {
+			if accessReq.GetUser() != req.Username {
 				return nil, trace.AccessDenied("invalid access request %q", reqID)
 			}
-			if !roleReq.GetState().IsApproved() {
+			if !accessReq.GetState().IsApproved() {
 				return nil, trace.AccessDenied("access-request %q is awaiting approval", reqID)
 			}
-			if err := a.authServer.validateAccessRequest(roleReq); err != nil {
+			if err := a.authServer.validateAccessRequest(accessReq); err != nil {
 				return nil, trace.Wrap(err)
 			}
-			rexp := roleReq.Expiry()
-			if rexp.Before(a.authServer.GetClock().Now()) {
+			aexp := accessReq.GetAccessExpiry()
+			if aexp.Before(a.authServer.GetClock().Now()) {
 				return nil, trace.AccessDenied("access-request %q is expired", reqID)
 			}
-			if rexp.Before(req.Expires) {
+			if aexp.Before(req.Expires) {
 				// cannot generate a cert that would outlive the access request
-				req.Expires = rexp
+				req.Expires = aexp
 			}
-			roles = append(roles, roleReq.GetRoles()...)
+			roles = append(roles, accessReq.GetRoles()...)
 		}
 		// nothing prevents an access-request from including roles already posessed by the
 		// user, so we must make sure to trim duplicate roles.

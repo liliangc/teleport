@@ -97,6 +97,12 @@ type AccessRequest interface {
 	GetState() RequestState
 	// SetApproved sets the approval state of the request
 	SetState(RequestState) error
+	// GetAccessExpiry gets the upper limit for which this request
+	// may be considered active.
+	GetAccessExpiry() time.Time
+	// SetAccessExpiry sets the upper limit for which this request
+	// may be considered active.
+	SetAccessExpiry(time.Time)
 	// CheckAndSetDefaults validates the access request and
 	// supplies default values where appropriate.
 	CheckAndSetDefaults() error
@@ -123,7 +129,6 @@ func NewAccessRequest(user string, roles ...string) (AccessRequest, error) {
 		Version: V3,
 		Metadata: Metadata{
 			Name: uuid.New(),
-			// TODO: add expiry
 		},
 		Spec: AccessRequestSpecV1{
 			User:  user,
@@ -158,6 +163,14 @@ func (r *AccessRequestV1) SetState(state RequestState) error {
 	}
 	r.Spec.State = state
 	return nil
+}
+
+func (r *AccessRequestV1) GetAccessExpiry() time.Time {
+	return r.Spec.Expires
+}
+
+func (r *AccessRequestV1) SetAccessExpiry(expiry time.Time) {
+	r.Spec.Expires = expiry
 }
 
 func (r *AccessRequestV1) CheckAndSetDefaults() error {
@@ -291,7 +304,8 @@ const AccessRequestSpecSchema = `{
 			"type": "array",
 			"items": { "type": "string" }
 		},
-		"state": { "type": "integer" }
+		"state": { "type": "integer" },
+		"expires": {"type": "string" }
 	}
 }`
 

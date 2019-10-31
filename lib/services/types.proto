@@ -403,8 +403,8 @@ message AccessRequestSpecV1 {
     repeated string Roles = 2 [(gogoproto.jsontag) = "roles"];
     // State is the current state of this access request.
     RequestState State = 3 [(gogoproto.jsontag) = "state,omitempty"];
-    // Approved is set to true if an approval is processed.
-    //bool Approved = 3 [(gogoproto.jsontag) = "approved,omitempty"];
+    // Expires constrains the maximum lifetime of any login session for which this request is active. 
+    google.protobuf.Timestamp Expires = 4 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false, (gogoproto.jsontag) = "expires,omitempty"];
 }
 
 // AccessRequestFilter encodes filter params for access requests.

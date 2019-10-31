@@ -65,6 +65,11 @@ func (s *AccessService) SetAccessRequestState(name string, state services.Reques
 	if err := req.SetState(state); err != nil {
 		return trace.Wrap(err)
 	}
+	// approved requests should have a resource expiry which matches
+	// the underlying access expiry.
+	if state.IsApproved() {
+		req.SetExpiry(req.GetAccessExpiry())
+	}
 	newItem, err := itemFromAccessRequest(req)
 	if err != nil {
 		return trace.Wrap(err)
