@@ -68,8 +68,6 @@ type CLIConf struct {
 	RemoteCommand []string
 	// DesiredRoles indicates one or more roles which should be requested.
 	DesiredRoles string
-	// AccessRequests indicates one or more approved access requests.
-	AccessRequests []string
 	// Username is the Teleport user's username (to login into proxies)
 	Username string
 	// Proxy keeps the hostname:port of the SSH proxy to use
@@ -278,22 +276,6 @@ func Run(args []string, underTest bool) {
 	// logout deletes obtained session certificates in ~/.tsh
 	logout := app.Command("logout", "Delete a cluster certificate")
 
-	request := app.Command("request", "Manage requests for escalated privilege")
-
-	requestExecute := request.Command("execute", "Execute a request for escalated privilege")
-	requestExecute.Flag("roles", "Specify one or more roles to be requested").Required().StringVar(&cf.DesiredRoles)
-	requestExecute.Flag("cluster", clusterHelp).Envar(clusterEnvVar).StringVar(&cf.SiteName)
-
-	requestCreate := request.Command("create", "Create a new request for escalated privilege")
-	requestCreate.Flag("roles", "Specify one or more roles to be requested").Required().StringVar(&cf.DesiredRoles)
-	requestCreate.Flag("cluster", clusterHelp).Envar(clusterEnvVar).StringVar(&cf.SiteName)
-
-	requestApply := request.Command("apply", "Apply an approved request to the current session")
-	requestApply.Arg("request", "Request ID of approved access request(s)").Required().StringsVar(&cf.AccessRequests)
-	requestApply.Flag("cluster", clusterHelp).Envar(clusterEnvVar).StringVar(&cf.SiteName)
-
-	requestList := request.Command("ls", "List all pending requests")
-
 	// bench
 	bench := app.Command("bench", "Run shell or execute a command on a remote SSH node").Hidden()
 	bench.Flag("cluster", clusterHelp).Envar(clusterEnvVar).StringVar(&cf.SiteName)
@@ -377,14 +359,6 @@ func Run(args []string, underTest bool) {
 	case logout.FullCommand():
 		refuseArgs(logout.FullCommand(), args)
 		onLogout(&cf)
-	case requestExecute.FullCommand():
-		onRequestExecute(&cf)
-	case requestCreate.FullCommand():
-		onRequestCreate(&cf)
-	case requestApply.FullCommand():
-		onRequestApply(&cf)
-	case requestList.FullCommand():
-		onRequestList(&cf)
 	case show.FullCommand():
 		onShow(&cf)
 	case status.FullCommand():
@@ -399,100 +373,6 @@ func onPlay(cf *CLIConf) {
 		utils.FatalError(err)
 	}
 	if err := tc.Play(context.TODO(), cf.Namespace, cf.SessionID); err != nil {
-		utils.FatalError(err)
-	}
-}
-
-func onRequestCreate(cf *CLIConf) {
-	if cf.DesiredRoles == "" {
-		utils.FatalError(trace.BadParameter("one or more roles must be specified"))
-	}
-	roles := strings.Split(cf.DesiredRoles, ",")
-	tc, err := makeClient(cf, true)
-	if err != nil {
-		utils.FatalError(err)
-	}
-	if cf.Username == "" {
-		cf.Username = tc.Username
-	}
-	req, err := services.NewAccessRequest(cf.Username, roles...)
-	if err != nil {
-		utils.FatalError(err)
-	}
-	if err := tc.CreateAccessRequest(context.TODO(), req); err != nil {
-		utils.FatalError(err)
-	}
-	fmt.Println(req.GetName())
-}
-
-func onRequestExecute(cf *CLIConf) {
-	if cf.DesiredRoles == "" {
-		utils.FatalError(trace.BadParameter("one or more roles must be specified"))
-	}
-	roles := strings.Split(cf.DesiredRoles, ",")
-	tc, err := makeClient(cf, true)
-	if err != nil {
-		utils.FatalError(err)
-	}
-	if cf.Username == "" {
-		cf.Username = tc.Username
-	}
-	req, err := services.NewAccessRequest(cf.Username, roles...)
-	if err != nil {
-		utils.FatalError(err)
-	}
-	fmt.Fprintf(os.Stderr, "Seeking request approval... (id: %s)\n", req.GetName())
-	if err := getRequestApproval(cf, tc, req); err != nil {
-		utils.FatalError(err)
-	}
-	fmt.Fprintf(os.Stderr, "Approval received, getting updated certificates...\n\n")
-	if err := reissueWithRequests(cf, tc, req.GetName()); err != nil {
-		utils.FatalError(err)
-	}
-	onStatus(cf)
-}
-
-func onRequestApply(cf *CLIConf) {
-	if len(cf.AccessRequests) < 1 {
-		utils.FatalError(trace.BadParameter("one or more request ids must be specified"))
-	}
-	tc, err := makeClient(cf, true)
-	if err != nil {
-		utils.FatalError(err)
-	}
-	if err := reissueWithRequests(cf, tc, cf.AccessRequests...); err != nil {
-		utils.FatalError(err)
-	}
-	onStatus(cf)
-}
-
-func onRequestList(cf *CLIConf) {
-	tc, err := makeClient(cf, true)
-	if err != nil {
-		utils.FatalError(err)
-	}
-	reqs, err := tc.GetAccessRequests(context.TODO(), services.AccessRequestFilter{
-		User: tc.Username,
-	})
-	if err != nil {
-		utils.FatalError(err)
-	}
-	table := asciitable.MakeTable([]string{"ID", "role(s)", "state", "ttl"})
-	now := time.Now()
-	for _, req := range reqs {
-		if now.After(req.Expiry()) {
-			continue
-		}
-		ttl := req.Expiry().Sub(now).Round(time.Second)
-		table.AddRow([]string{
-			req.GetName(),
-			strings.Join(req.GetRoles(), ","),
-			req.GetState().String(),
-			ttl.String(),
-		})
-	}
-	_, err = table.AsBuffer().WriteTo(os.Stdout)
-	if err != nil {
 		utils.FatalError(err)
 	}
 }
@@ -568,7 +448,7 @@ func onLogin(cf *CLIConf) {
 		// but desired roles are specified, treat this as a privilege escalation
 		// request for the same login session.
 		case (cf.Proxy == "" || host(cf.Proxy) == host(profile.ProxyURL.Host)) && cf.DesiredRoles != "":
-			onRequestExecute(cf)
+			executeAccessRequest(cf)
 			return
 		// otherwise just passthrough to standard login
 		default:
@@ -618,7 +498,7 @@ func onLogin(cf *CLIConf) {
 	cf.Proxy = webProxyHost
 	if cf.DesiredRoles != "" {
 		fmt.Println("") // visually separate onRequestExecute output
-		onRequestExecute(cf)
+		executeAccessRequest(cf)
 	} else {
 		onStatus(cf)
 	}
@@ -807,6 +687,33 @@ func onListNodes(cf *CLIConf) {
 		}
 		fmt.Println(t.AsBuffer().String())
 	}
+}
+
+func executeAccessRequest(cf *CLIConf) {
+	if cf.DesiredRoles == "" {
+		utils.FatalError(trace.BadParameter("one or more roles must be specified"))
+	}
+	roles := strings.Split(cf.DesiredRoles, ",")
+	tc, err := makeClient(cf, true)
+	if err != nil {
+		utils.FatalError(err)
+	}
+	if cf.Username == "" {
+		cf.Username = tc.Username
+	}
+	req, err := services.NewAccessRequest(cf.Username, roles...)
+	if err != nil {
+		utils.FatalError(err)
+	}
+	fmt.Fprintf(os.Stderr, "Seeking request approval... (id: %s)\n", req.GetName())
+	if err := getRequestApproval(cf, tc, req); err != nil {
+		utils.FatalError(err)
+	}
+	fmt.Fprintf(os.Stderr, "Approval received, getting updated certificates...\n\n")
+	if err := reissueWithRequests(cf, tc, req.GetName()); err != nil {
+		utils.FatalError(err)
+	}
+	onStatus(cf)
 }
 
 // chunkLabels breaks labels into sized chunks. Used to improve readability
@@ -1171,92 +1078,6 @@ func refuseArgs(command string, args []string) {
 
 	}
 }
-
-/*
-// rawIdentity encodes the basic components of an identity file.
-type rawIdentity struct {
-	PrivateKey []byte
-	Certs      struct {
-		SSH []byte
-		TLS []byte
-	}
-	CACerts struct {
-		SSH [][]byte
-		TLS [][]byte
-	}
-}
-
-// decodeIdentity attempts to break up the contents of an identity file
-// into its respective components.
-func decodeIdentity(r io.Reader) (*rawIdentity, error) {
-	scanner := bufio.NewScanner(r)
-	var ident rawIdentity
-	// Subslice of scanner's buffer pointing to current line
-	// with leading and trailing whitespace trimmed.
-	var line []byte
-	// Attempt to scan to the next line.
-	scanln := func() bool {
-		if !scanner.Scan() {
-			line = nil
-			return false
-		}
-		line = bytes.TrimSpace(scanner.Bytes())
-		return true
-	}
-	// Check if the current line starts with prefix `p`.
-	peekln := func(p string) bool {
-		return bytes.HasPrefix(line, []byte(p))
-	}
-	// Get an "owned" copy of the current line.
-	cloneln := func() []byte {
-		ln := make([]byte, len(line))
-		copy(ln, line)
-		return ln
-	}
-	// Scan through all lines of identity file.  Lines with a known prefix
-	// are copied out of the scanner's buffer.  All others are ignored.
-	for scanln() {
-		switch {
-		case peekln("ssh"):
-			ident.Certs.SSH = cloneln()
-		case peekln("@cert-authority"):
-			ident.CACerts.SSH = append(ident.CACerts.SSH, cloneln())
-		case peekln("-----BEGIN"):
-			// Current line marks the beginning of a PEM block.  Consume all
-			// lines until a corresponding END is found.
-			var pemBlock []byte
-			for {
-				pemBlock = append(pemBlock, line...)
-				pemBlock = append(pemBlock, '\n')
-				if peekln("-----END") {
-					break
-				}
-				if !scanln() {
-					// If scanner has terminated in the middle of a PEM block, either
-					// the reader encountered an error, or the PEM block is a fragment.
-					if err := scanner.Err(); err != nil {
-						return nil, trace.Wrap(err)
-					}
-					return nil, trace.BadParameter("invalid PEM block (fragment)")
-				}
-			}
-			// Decide where to place the pem block based on
-			// which pem blocks have already been found.
-			switch {
-			case ident.PrivateKey == nil:
-				ident.PrivateKey = pemBlock
-			case ident.Certs.TLS == nil:
-				ident.Certs.TLS = pemBlock
-			default:
-				ident.CACerts.TLS = append(ident.CACerts.TLS, pemBlock)
-			}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return &ident, nil
-}*/
 
 // loadIdentity loads the private key + certificate from a file
 // Returns:
