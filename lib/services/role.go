@@ -266,12 +266,10 @@ type Role interface {
 	// SetKubeGroups sets kubernetes groups for allow or deny condition.
 	SetKubeGroups(RoleConditionType, []string)
 
-	// GetRequestableRoles gets the list of roles that holders of this
-	// role are able to request.
-	GetRequestableRoles() []string
-	// SetRequestableRoles sets the list of roles that holder of this
-	// role are able to request.
-	SetRequestableRoles([]string)
+	// GetRequestConditions gets allow/deny conditions for access requests.
+	GetRequestConditions(RoleConditionType) AccessRequestConditions
+	// SetRequestConditions sets allow/deny conditions for access requests.
+	SetRequestConditions(RoleConditionType, AccessRequestConditions)
 }
 
 // ApplyTraits applies the passed in traits to any variables within the role
@@ -523,16 +521,25 @@ func (r *RoleV3) SetKubeGroups(rct RoleConditionType, groups []string) {
 	}
 }
 
-// GetRequestableRoles gets the list of roles that holders of this
-// role are able to request.
-func (r *RoleV3) GetRequestableRoles() []string {
-	return r.Spec.CanRequest.Roles
+// GetRequestConditions gets conditions for access requests.
+func (r *RoleV3) GetRequestConditions(rct RoleConditionType) AccessRequestConditions {
+	cond := r.Spec.Deny.Request
+	if rct == Allow {
+		cond = r.Spec.Allow.Request
+	}
+	if cond == nil {
+		return AccessRequestConditions{}
+	}
+	return *cond
 }
 
-// SetRequestableRoles sets the list of roles that holders of this
-// role are able to request.
-func (r *RoleV3) SetRequestableRoles(roles []string) {
-	r.Spec.CanRequest.Roles = roles
+// SetRequestConditions sets allow/deny conditions for access requests.
+func (r *RoleV3) SetRequestConditions(rct RoleConditionType, cond AccessRequestConditions) {
+	if rct == Allow {
+		r.Spec.Allow.Request = &cond
+	} else {
+		r.Spec.Deny.Request = &cond
+	}
 }
 
 // GetNamespaces gets a list of namespaces this role is allowed or denied access to.
@@ -2190,17 +2197,7 @@ const RoleSpecV3SchemaTemplate = `{
       }
     },
     "allow": { "$ref": "#/definitions/role_condition" },
-    "deny": { "$ref": "#/definitions/role_condition" },
-	"can_request": {
-	  "type": "object",
-	  "additionalProperties": false,
-	  "properties": {
-	    "roles": {
-		  "type": "array",
-		  "items": { "type": "string" }
-		}
-	  }
-	}%v
+    "deny": { "$ref": "#/definitions/role_condition" }%v
   }
 }
 `
@@ -2227,6 +2224,16 @@ const RoleSpecV3SchemaDefinitions = `
         "type": "array",
         "items": { "type": "string" }
       },
+	  "request": {
+	    "type": "object",
+		"additionalProperties": false,
+		"properties": {
+		  "roles": {
+		    "type": "array",
+			"items": { "type": "string" }
+		  }
+		}
+	  },
       "rules": {
         "type": "array",
         "items": {

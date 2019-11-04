@@ -1393,23 +1393,42 @@ func (a *AuthServer) validateAccessRequest(req services.AccessRequest) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	// notSeen tracks the roles that are requested, but have not yet been
-	// seen in any of the user's intrinsic roles' "can request" blocks.
-	notSeen := make(map[string]struct{}, len(req.GetRoles()))
+	type rstate struct {
+		allowed bool
+		denied  bool
+	}
+	roleStates := make(map[string]rstate, len(req.GetRoles()))
 	for _, r := range req.GetRoles() {
-		notSeen[r] = struct{}{}
+		roleStates[r] = rstate{false, false}
 	}
 	for _, roleName := range user.GetRoles() {
 		role, err := a.GetRole(roleName)
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		for _, r := range role.GetRequestableRoles() {
-			delete(notSeen, r)
+	Allow:
+		for _, r := range role.GetRequestConditions(services.Allow).Roles {
+			s, ok := roleStates[r]
+			if !ok {
+				continue Allow
+			}
+			s.allowed = true
+			roleStates[r] = s
+		}
+	Deny:
+		for _, r := range role.GetRequestConditions(services.Deny).Roles {
+			s, ok := roleStates[r]
+			if !ok {
+				continue Deny
+			}
+			s.denied = true
+			roleStates[r] = s
 		}
 	}
-	for r := range notSeen {
-		return trace.NotFound("no rule allows user %q to request role %q", req.GetUser(), r)
+	for roleName, roleState := range roleStates {
+		if roleState.denied || !roleState.allowed {
+			return trace.BadParameter("user %q cannot request role %q", req.GetUser(), roleName)
+		}
 	}
 	return nil
 }

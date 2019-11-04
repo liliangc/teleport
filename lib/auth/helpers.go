@@ -650,10 +650,9 @@ func CreateUserRoleAndRequestable(clt clt, username string, rolename string) (se
 	}
 	baseRole := services.RoleForUser(user)
 	baseRole.SetLogins(services.Allow, []string{username})
-	baseRole.SetRequestableRoles([]string{rolename})
-	if baseRole.GetRequestableRoles()[0] != rolename {
-		panic(baseRole.GetRequestableRoles())
-	}
+	baseRole.SetRequestConditions(services.Allow, services.AccessRequestConditions{
+		Roles: []string{rolename},
+	})
 	err = clt.UpsertRole(baseRole)
 	if err != nil {
 		return nil, trace.Wrap(err)

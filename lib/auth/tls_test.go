@@ -1442,8 +1442,6 @@ func (s *TLSSuite) TestAccessRequest(c *check.C) {
 	// verify that user does not have the ability to approve their own request (not a special case, this
 	// user just wasn't created with the necessary roles for request management).
 	c.Assert(userClient.SetAccessRequestState(req.GetName(), services.RequestState_APPROVED), check.NotNil)
-
-	// TODO(fspmarshall): Verfiy that role-mappings to trusted clusters behave as expected.
 }
 
 // TestGenerateCerts tests edge cases around authorization of

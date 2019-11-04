@@ -440,8 +440,6 @@ message RoleSpecV3 {
 	RoleConditions Allow = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "allow,omitempty"];
 	// Deny is the set of conditions evaluated to deny access. Deny takes priority over allow.
 	RoleConditions Deny = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "deny,omitempty"];
-    // CanRequest is a set of conditions allowing registration of requests for escalated privilege.
-    RoleCanRequest CanRequest = 4 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "can_request,omitempty"];
 }
 
 // RoleOptions is a set of role options
@@ -490,11 +488,13 @@ message RoleConditions {
 
 	// KubeGroups is a list of kubernetes groups
 	repeated string KubeGroups = 5 [(gogoproto.jsontag) = "kubernetes_groups,omitempty"];
+
+    AccessRequestConditions Request = 6 [(gogoproto.jsontag) = "request,omitempty"];
 }
 
-// RoleCanRequest describes permissions available "on request".
-message RoleCanRequest {
-    // Roles encodes the names of one or more roles which can be requested.
+// AccessRequestConditions is a matcher for allow/deny restrictions on access-requests.
+message AccessRequestConditions {
+    // Roles is the name of roles which will match the request rule.
     repeated string Roles = 1 [(gogoproto.jsontag) = "roles,omitempty"];
 }
 
