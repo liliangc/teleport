@@ -1368,6 +1368,7 @@ func (a *AuthServer) CreateAccessRequest(req services.AccessRequest) error {
 		return trace.Wrap(err)
 	}
 	now := a.clock.Now().UTC()
+	req.SetCreationTime(now)
 	exp := now.Add(ttl)
 	// By default, resource expiry should match access expiry.
 	req.SetExpiry(exp)

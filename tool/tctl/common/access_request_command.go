@@ -17,7 +17,6 @@ limitations under the License.
 package common
 
 import (
-	//"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -27,10 +26,8 @@ import (
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/lib/asciitable"
 	"github.com/gravitational/teleport/lib/auth"
-	//"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/service"
 	"github.com/gravitational/teleport/lib/services"
-	//"github.com/gravitational/teleport/lib/web"
 	"github.com/gravitational/trace"
 )
 
@@ -41,7 +38,7 @@ type AccessRequestCommand struct {
 	reqIDs []string
 
 	user  string
-	roles []string
+	roles string
 	// format is the output format, e.g. text or json
 	format string
 
@@ -55,7 +52,7 @@ type AccessRequestCommand struct {
 // Initialize allows AccessRequestCommand to plug itself into the CLI parser
 func (c *AccessRequestCommand) Initialize(app *kingpin.Application, config *service.Config) {
 	c.config = config
-	requests := app.Command("request", "Manage access requests")
+	requests := app.Command("requests", "Manage access requests").Alias("request")
 
 	c.requestList = requests.Command("ls", "Show active access requests")
 	c.requestList.Flag("format", "Output format, 'text' or 'json'").Hidden().Default(teleport.Text).StringVar(&c.format)
@@ -68,7 +65,7 @@ func (c *AccessRequestCommand) Initialize(app *kingpin.Application, config *serv
 
 	c.requestCreate = requests.Command("create", "Create pending access request")
 	c.requestCreate.Arg("username", "Name of target user").Required().StringVar(&c.user)
-	c.requestCreate.Arg("roles", "Roles to be requested").Required().StringsVar(&c.roles)
+	c.requestCreate.Flag("roles", "Roles to be requested").Required().StringVar(&c.roles)
 
 	c.requestDelete = requests.Command("del", "Delete an access request")
 	c.requestDelete.Arg("request-id", "ID of target request(s)").Required().StringsVar(&c.reqIDs)
@@ -121,7 +118,8 @@ func (c *AccessRequestCommand) Deny(client auth.ClientI) error {
 }
 
 func (c *AccessRequestCommand) Create(client auth.ClientI) error {
-	req, err := services.NewAccessRequest(c.user, c.roles...)
+	roles := strings.Split(c.roles, ",")
+	req, err := services.NewAccessRequest(c.user, roles...)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -144,19 +142,19 @@ func (c *AccessRequestCommand) Delete(client auth.ClientI) error {
 // PrintAccessRequests prints access requests
 func (c *AccessRequestCommand) PrintAccessRequests(client auth.ClientI, reqs []services.AccessRequest, format string) error {
 	if format == teleport.Text {
-		table := asciitable.MakeTable([]string{"ID", "user", "role(s)", "state", "ttl"})
+		table := asciitable.MakeTable([]string{"Token", "Requestor", "Metadata", "Created At (UTC)", "Status"})
 		now := time.Now()
 		for _, req := range reqs {
-			if now.After(req.Expiry()) {
+			if now.After(req.GetAccessExpiry()) {
 				continue
 			}
-			ttl := req.Expiry().Sub(now).Round(time.Second)
+			params := fmt.Sprintf("roles=%s", strings.Join(req.GetRoles(), ","))
 			table.AddRow([]string{
 				req.GetName(),
 				req.GetUser(),
-				strings.Join(req.GetRoles(), ","),
+				params,
+				req.GetCreationTime().Format(time.RFC822),
 				req.GetState().String(),
-				ttl.String(),
 			})
 		}
 		_, err := table.AsBuffer().WriteTo(os.Stdout)

@@ -97,6 +97,11 @@ type AccessRequest interface {
 	GetState() RequestState
 	// SetApproved sets the approval state of the request
 	SetState(RequestState) error
+	// GetCreationTime gets the time at which the request was
+	// originally registered with the auth server.
+	GetCreationTime() time.Time
+	// SetCreationTime sets the creation time of the request.
+	SetCreationTime(time.Time)
 	// GetAccessExpiry gets the upper limit for which this request
 	// may be considered active.
 	GetAccessExpiry() time.Time
@@ -163,6 +168,14 @@ func (r *AccessRequestV1) SetState(state RequestState) error {
 	}
 	r.Spec.State = state
 	return nil
+}
+
+func (r *AccessRequestV1) GetCreationTime() time.Time {
+	return r.Spec.Created
+}
+
+func (r *AccessRequestV1) SetCreationTime(t time.Time) {
+	r.Spec.Created = t
 }
 
 func (r *AccessRequestV1) GetAccessExpiry() time.Time {
@@ -305,7 +318,8 @@ const AccessRequestSpecSchema = `{
 			"items": { "type": "string" }
 		},
 		"state": { "type": "integer" },
-		"expires": {"type": "string" }
+		"created": { "type": "string" },
+		"expires": { "type": "string" }
 	}
 }`
 
