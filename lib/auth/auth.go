@@ -1370,12 +1370,12 @@ func (a *AuthServer) CreateAccessRequest(req services.AccessRequest) error {
 	now := a.clock.Now().UTC()
 	req.SetCreationTime(now)
 	exp := now.Add(ttl)
-	// By default, resource expiry should match access expiry.
-	req.SetExpiry(exp)
 	// Set acccess expiry if an allowable default was not provided.
 	if req.GetAccessExpiry().Before(now) || req.GetAccessExpiry().After(exp) {
 		req.SetAccessExpiry(exp)
 	}
+	// By default, resource expiry should match access expiry.
+	req.SetExpiry(req.GetAccessExpiry())
 	// If the access-request is in a pending state, then the expiry of the underlying resource
 	// is capped to to PendingAccessDuration in order to limit orphaned access requests.
 	if req.GetState().IsPending() {
@@ -1545,56 +1545,6 @@ func (a *AuthServer) GetTunnelConnections(clusterName string, opts ...services.M
 func (a *AuthServer) GetAllTunnelConnections(opts ...services.MarshalOption) (conns []services.TunnelConnection, err error) {
 	return a.GetCache().GetAllTunnelConnections(opts...)
 }
-
-/*
-// awaitRoleApproval waits for an approval event for the specified access request.
-//
-// NOTE: this method may block indefinitely if no timeout is applied to ctx.
-func (a *AuthServer) awaitRoleApproval(ctx context.Context, requestID string) (approved bool, err error) {
-	watcher, err := a.NewWatcher(ctx, services.Watch{
-		Name: "role-approval-",
-		Kinds: []services.WatchKind{
-			services.WatchKind{
-				Kind: services.KindAccessRequest,
-				Name: requestID,
-			},
-		},
-	})
-	if err != nil {
-		return false, trace.Wrap(err)
-	}
-	defer watcher.Close()
-	for {
-		select {
-		case event := <-watcher.Events():
-			if event.Resource.GetKind() != services.KindAccessRequest {
-				return false, trace.BadParameter("unexpected resource kind %q", event.Resource.GetKind())
-			}
-			if event.Resource.GetName() != requestID {
-				return false, trace.BadParameter("unexpected request ID %q", event.Resource.GetName())
-			}
-			switch event.Type {
-			case backend.OpInit:
-				continue
-			case backend.OpPut:
-				req, ok := event.Resource.(services.AccessRequest)
-				if !ok {
-					return false, trace.BadParameter("unexpected resource type %T", event.Resource)
-				}
-				return req.IsApproved(), nil
-			case backend.OpDelete:
-				return false, nil
-			default:
-				return false, trace.BadParameter("unexpected event type %s", event.Type)
-			}
-		case <-ctx.Done():
-			return false, trace.Wrap(ctx.Err())
-		case <-watcher.Done():
-			return false, trace.Wrap(watcher.Error())
-		}
-	}
-}
-*/
 
 // authKeepAliver is a keep aliver using auth server directly
 type authKeepAliver struct {

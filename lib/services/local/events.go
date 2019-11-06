@@ -487,23 +487,23 @@ func (p *roleParser) parse(event backend.Event) (services.Resource, error) {
 	}
 }
 
-func newAccessRequestParser() *roleRequestParser {
-	return &roleRequestParser{
-		matchPrefix: backend.Key(roleRequestsPrefix),
+func newAccessRequestParser() *accessRequestParser {
+	return &accessRequestParser{
+		matchPrefix: backend.Key(accessRequestsPrefix),
 		matchSuffix: backend.Key(paramsPrefix),
 	}
 }
 
-type roleRequestParser struct {
+type accessRequestParser struct {
 	matchPrefix []byte
 	matchSuffix []byte
 }
 
-func (p *roleRequestParser) prefix() []byte {
+func (p *accessRequestParser) prefix() []byte {
 	return p.matchPrefix
 }
 
-func (p *roleRequestParser) match(key []byte) bool {
+func (p *accessRequestParser) match(key []byte) bool {
 	if !bytes.HasPrefix(key, p.matchPrefix) {
 		return false
 	}
@@ -513,7 +513,7 @@ func (p *roleRequestParser) match(key []byte) bool {
 	return true
 }
 
-func (p *roleRequestParser) parse(event backend.Event) (services.Resource, error) {
+func (p *accessRequestParser) parse(event backend.Event) (services.Resource, error) {
 	switch event.Type {
 	case backend.OpDelete:
 		return resourceHeader(event, services.KindAccessRequest, services.V3, 1)

@@ -61,7 +61,7 @@ func (r *RequestIDs) IsEmpty() bool {
 	return len(r.AccessRequests) < 1
 }
 
-// Match checks if a given access request matchers this filter.
+// Match checks if a given access request matches this filter.
 func (f *AccessRequestFilter) Match(req AccessRequest) bool {
 	if f.ID != "" && req.GetName() != f.ID {
 		return false
@@ -95,7 +95,7 @@ type AccessRequest interface {
 	GetRoles() []string
 	// GetState gets the current state of the request
 	GetState() RequestState
-	// SetApproved sets the approval state of the request
+	// SetState sets the approval state of the request
 	SetState(RequestState) error
 	// GetCreationTime gets the time at which the request was
 	// originally registered with the auth server.
@@ -240,6 +240,12 @@ func (s *AccessRequestSpecV1) Equals(other *AccessRequestSpecV1) bool {
 		if role != other.Roles[i] {
 			return false
 		}
+	}
+	if s.Created != other.Created {
+		return false
+	}
+	if s.Expires != other.Expires {
+		return false
 	}
 	return s.State == other.State
 }

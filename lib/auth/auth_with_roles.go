@@ -782,6 +782,7 @@ func (a *AuthWithRoles) DeleteWebSession(user string, sid string) error {
 }
 
 func (a *AuthWithRoles) GetAccessRequests(filter services.AccessRequestFilter) ([]services.AccessRequest, error) {
+	// An exception is made to allow users to get their own access requests.
 	if filter.User == "" || a.currentUserAction(filter.User) != nil {
 		if err := a.action(defaults.Namespace, services.KindAccessRequest, services.VerbList); err != nil {
 			return nil, trace.Wrap(err)
@@ -794,6 +795,7 @@ func (a *AuthWithRoles) GetAccessRequests(filter services.AccessRequestFilter) (
 }
 
 func (a *AuthWithRoles) WatchAccessRequests(ctx context.Context, filter services.AccessRequestFilter) (AccessRequestWatcher, error) {
+	// An exception is made to allow users to watch their own access requests.
 	if filter.User == "" || a.currentUserAction(filter.User) != nil {
 		if err := a.action(defaults.Namespace, services.KindAccessRequest, services.VerbList); err != nil {
 			return nil, trace.Wrap(err)
@@ -810,9 +812,8 @@ func (a *AuthWithRoles) WatchAccessRequests(ctx context.Context, filter services
 }
 
 func (a *AuthWithRoles) CreateAccessRequest(req services.AccessRequest) error {
+	// An exception is made to allow users to create access *pending* requests for themselves.
 	if !req.GetState().IsPending() || a.currentUserAction(req.GetUser()) != nil {
-		// Users are allowed to create pending requests for themselves, all other
-		// creation attempts are subject to normal permissioning.
 		if err := a.action(defaults.Namespace, services.KindAccessRequest, services.VerbCreate); err != nil {
 			return trace.Wrap(err)
 		}

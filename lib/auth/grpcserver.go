@@ -278,41 +278,6 @@ func (g *GRPCServer) SetAccessRequestState(ctx context.Context, req *proto.Reque
 	return &empty.Empty{}, nil
 }
 
-/*
-func (g *GRPCServer) SubmitRoleDecisions(stream proto.AuthService_SubmitRoleDecisionsServer) error {
-	auth, err := g.authenticate(stream.Context())
-	if err != nil {
-		return trail.ToGRPC(err)
-	}
-	g.Debugf("Opening role decision channel for %q", auth.User.GetName())
-	for {
-		msg, err := stream.Recv()
-		if err != nil {
-			if err == io.EOF {
-				g.Debugf("Role decision channel closing.")
-				return nil
-			}
-			g.Debugf("Role decision channel failed: %v", err)
-			return trail.ToGRPC(err)
-		}
-		switch msg.Decision {
-		case proto.Decision_APPROVE:
-			g.Debugf("Approving access request %q", msg.ID)
-			err = auth.SetAccessRequestState(msg.ID, services.RequestState_APPROVED)
-		case proto.Decision_DENY:
-			g.Debugf("Denying access request %q", msg.ID)
-			err = auth.SetAccessRequestState(msg.ID, services.RequestState_DENIED)
-		default:
-			err = trace.BadParameter("unknown decision variant %q", msg.Decision.String())
-		}
-		if err != nil {
-			g.Debugf("Closing role decision channel: %v", err)
-			return trail.ToGRPC(err)
-		}
-	}
-}
-*/
-
 type grpcContext struct {
 	*AuthContext
 	*AuthWithRoles

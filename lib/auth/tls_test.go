@@ -1386,7 +1386,7 @@ func (s *TLSSuite) TestAccessRequest(c *check.C) {
 
 	c.Assert(userClient.CreateAccessRequest(req), check.IsNil)
 
-	// sanity check; ensure that roles for which no `can_request` block
+	// sanity check; ensure that roles for which no `allow` directive
 	// exists cannot be requested.
 	badReq, err := services.NewAccessRequest(user, "some-fake-role")
 	c.Assert(err, check.IsNil)
@@ -1425,6 +1425,10 @@ func (s *TLSSuite) TestAccessRequest(c *check.C) {
 	_, err = generateCerts(req.GetName())
 	c.Assert(err, check.NotNil)
 
+	// verify that user does not have the ability to approve their own request (not a special case, this
+	// user just wasn't created with the necessary roles for request management).
+	c.Assert(userClient.SetAccessRequestState(req.GetName(), services.RequestState_APPROVED), check.NotNil)
+
 	// attempt to apply request in APPROVED state (should succeed)
 	c.Assert(s.server.Auth().SetAccessRequestState(req.GetName(), services.RequestState_APPROVED), check.IsNil)
 	userCerts, err = generateCerts(req.GetName())
@@ -1439,9 +1443,11 @@ func (s *TLSSuite) TestAccessRequest(c *check.C) {
 	_, err = generateCerts(req.GetName())
 	c.Assert(err, check.NotNil)
 
-	// verify that user does not have the ability to approve their own request (not a special case, this
-	// user just wasn't created with the necessary roles for request management).
-	c.Assert(userClient.SetAccessRequestState(req.GetName(), services.RequestState_APPROVED), check.NotNil)
+	// ensure that once in the DENIED state, a request cannot be set back to PENDING state.
+	c.Assert(s.server.Auth().SetAccessRequestState(req.GetName(), services.RequestState_PENDING), check.NotNil)
+
+	// ensure that once in the DENIED state, a request cannot be set back to APPROVED state.
+	c.Assert(s.server.Auth().SetAccessRequestState(req.GetName(), services.RequestState_APPROVED), check.NotNil)
 }
 
 // TestGenerateCerts tests edge cases around authorization of

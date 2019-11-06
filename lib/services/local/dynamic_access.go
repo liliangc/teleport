@@ -51,7 +51,7 @@ func (s *AccessService) CreateAccessRequest(req services.AccessRequest) error {
 }
 
 func (s *AccessService) SetAccessRequestState(name string, state services.RequestState) error {
-	item, err := s.Get(context.TODO(), roleRequestKey(name))
+	item, err := s.Get(context.TODO(), accessRequestKey(name))
 	if err != nil {
 		if trace.IsNotFound(err) {
 			return trace.NotFound("cannot set state of access request %q (not found)", name)
@@ -81,7 +81,7 @@ func (s *AccessService) SetAccessRequestState(name string, state services.Reques
 }
 
 func (s *AccessService) GetAccessRequest(name string) (services.AccessRequest, error) {
-	item, err := s.Get(context.TODO(), roleRequestKey(name))
+	item, err := s.Get(context.TODO(), accessRequestKey(name))
 	if err != nil {
 		if trace.IsNotFound(err) {
 			return nil, trace.NotFound("access request %q not found", name)
@@ -96,7 +96,7 @@ func (s *AccessService) GetAccessRequest(name string) (services.AccessRequest, e
 }
 
 func (s *AccessService) GetAccessRequests(filter services.AccessRequestFilter) ([]services.AccessRequest, error) {
-	result, err := s.GetRange(context.TODO(), backend.Key(roleRequestsPrefix), backend.RangeEnd(backend.Key(roleRequestsPrefix)), backend.NoLimit)
+	result, err := s.GetRange(context.TODO(), backend.Key(accessRequestsPrefix), backend.RangeEnd(backend.Key(accessRequestsPrefix)), backend.NoLimit)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -120,7 +120,7 @@ func (s *AccessService) GetAccessRequests(filter services.AccessRequestFilter) (
 }
 
 func (s *AccessService) DeleteAccessRequest(name string) error {
-	err := s.Delete(context.TODO(), roleRequestKey(name))
+	err := s.Delete(context.TODO(), accessRequestKey(name))
 	if err != nil {
 		if trace.IsNotFound(err) {
 			return trace.NotFound("cannot delete access request %q (not found)", name)
@@ -136,7 +136,7 @@ func itemFromAccessRequest(req services.AccessRequest) (backend.Item, error) {
 		return backend.Item{}, trace.Wrap(err)
 	}
 	return backend.Item{
-		Key:     roleRequestKey(req.GetName()),
+		Key:     accessRequestKey(req.GetName()),
 		Value:   value,
 		Expires: req.Expiry(),
 		ID:      req.GetResourceID(),
@@ -155,10 +155,10 @@ func itemToAccessRequest(item backend.Item) (services.AccessRequest, error) {
 	return req, nil
 }
 
-func roleRequestKey(name string) []byte {
-	return backend.Key(roleRequestsPrefix, name, paramsPrefix)
+func accessRequestKey(name string) []byte {
+	return backend.Key(accessRequestsPrefix, name, paramsPrefix)
 }
 
 const (
-	roleRequestsPrefix = "access_requests"
+	accessRequestsPrefix = "access_requests"
 )

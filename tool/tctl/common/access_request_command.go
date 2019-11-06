@@ -17,6 +17,7 @@ limitations under the License.
 package common
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -160,6 +161,11 @@ func (c *AccessRequestCommand) PrintAccessRequests(client auth.ClientI, reqs []s
 		_, err := table.AsBuffer().WriteTo(os.Stdout)
 		return trace.Wrap(err)
 	} else {
-		panic("NOT IMPLEMENTED")
+		out, err := json.MarshalIndent(reqs, "", "  ")
+		if err != nil {
+			return trace.Wrap(err, "failed to marshal requests")
+		}
+		fmt.Printf("%s\n", out)
 	}
+	return nil
 }
